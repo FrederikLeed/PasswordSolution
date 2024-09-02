@@ -7,6 +7,7 @@
         [System.Collections.IDictionary] $AllSkipped,
         [System.Collections.IDictionary] $Locations,
         [System.Collections.IDictionary] $Logging,
+        [System.Collections.IDictionary] $UsersExternalSystem,
         [DateTime] $TodayDate
     )
     # Go for each rule and check if the user is in any of those rules
@@ -204,6 +205,16 @@
                         }
                     }
 
+                    if ($Rule.OverwriteEmailFromExternalUsers) {
+                        $ExternalUser = $null
+                        $ADProperty = $UsersExternalSystem.ActiveDirectoryProperty
+                        $EmailProperty = $UsersExternalSystem.EmailProperty
+                        $ExternalUser = $UsersExternalSystem['Users'][$User.$ADProperty]
+                        if ($ExternalUser -and $ExternalUser.$EmailProperty -like '*@*') {
+                            $User.EmailAddress = $ExternalUser.$EmailProperty
+                        }
+                    }
+
                     $Summary['Notify'][$User.DistinguishedName] = [ordered] @{
                         User                = $User
                         Rule                = $Rule
@@ -297,7 +308,7 @@
                         }
                     }
                     if ($SendToManager -and $Rule.SendToManager.Manager.IncludeGroup.Count -gt 0) {
-                        # Rule defined that only user withi specific group has to be found
+                        # Rule defined that only user within specific group has to be found
                         $FoundGroup = $false
                         foreach ($Group in $Rule.SendToManager.Manager.IncludeGroup) {
                             if ($User.MemberOf -contains $Group) {
@@ -402,6 +413,13 @@
                                 Rule              = $Rule
                             }
                             Add-ManagerInformation @Splat
+                        }
+                    }
+                } else {
+                    if ($Rule.SendToManager.Manager -and $Rule.SendToManager.Manager.Enable -eq $true) {
+                        # Manager rule is enabled but manager is not enabled or has no email
+                        if ($Logging.NotifyOnUserMatchingRuleForManagerButNotCompliant) {
+                            Write-Color -Text "[i]", " User (manager rule) ", $User.DisplayName, " (", $User.UserPrincipalName, ")", " days to expire: ", $User.DaysToExpire, ", manager status: ", $User.ManagerStatus, ". Reason to skip: ", "No manager or manager is not enabled or manager has no email " -Color Yellow, White, Yellow, White, Yellow, White, White, Red, White, Red, White, Red
                         }
                     }
                 }

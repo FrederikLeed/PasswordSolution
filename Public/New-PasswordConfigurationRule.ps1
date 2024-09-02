@@ -49,7 +49,7 @@
     Parameter description
 
     .PARAMETER ReminderDays
-    Parameter description
+    Days before expiration to send reminder. If not set and ProcessManagersOnly is not set, the rule will be throw an error.
 
     .PARAMETER ManagerReminder
     Parameter description
@@ -90,6 +90,9 @@
     .PARAMETER OverwriteManagerProperty
     Parameter description
 
+    .PARAMETER OverwriteEmailFromExternalUsers
+    Allow to overwrite email from external users for specific rule
+
     .PARAMETER ProcessManagersOnly
     This parameters is used to process users, but only managers will be notified.
     Sending emails to users within the rule will be skipped completly.
@@ -120,7 +123,7 @@
         [string[]] $IncludeGroup,
         [string[]] $ExcludeGroup,
 
-        [parameter(Mandatory)][alias('ExpirationDays', 'Days')][Array] $ReminderDays,
+        [alias('ExpirationDays', 'Days')][Array] $ReminderDays,
 
         [switch] $ManagerReminder,
 
@@ -140,28 +143,43 @@
         [string] $OverwriteEmailProperty,
         [string] $OverwriteManagerProperty,
 
-        [switch] $ProcessManagersOnly
+        [switch] $ProcessManagersOnly,
+
+        [switch] $OverwriteEmailFromExternalUsers
 
     )
 
+    if (-not $ProcessManagersOnly) {
+        if ($null -eq $ReminderDays) {
+            $ErrorMessage = "'ReminderDays' is required for rule '$Name', unless 'ProcessManagersOnly' is set. This is to make sure the rule is not skipped completly."
+            Write-Color -Text "[e]", " Processing rule ", $Name, " failed because of error: ", $ErrorMessage -Color Yellow, White, Red
+            return [ordered] @{
+                Type  = 'PasswordConfigurationRule'
+                Error = $ErrorMessage
+            }
+        }
+    }
+
     $Output = [ordered] @{
-        Name                        = $Name
-        Enable                      = $Enable.IsPresent
-        IncludeExpiring             = $IncludeExpiring.IsPresent
-        IncludePasswordNeverExpires = $IncludePasswordNeverExpires.IsPresent
-        Reminders                   = $ReminderDays
-        PasswordNeverExpiresDays    = $PasswordNeverExpiresDays
-        IncludeNameProperties       = $IncludeNameProperties
-        IncludeName                 = $IncludeName
-        IncludeOU                   = $IncludeOU
-        ExcludeOU                   = $ExcludeOU
-        SendToManager               = [ordered] @{}
+        Name                            = $Name
+        Enable                          = $Enable.IsPresent
+        IncludeExpiring                 = $IncludeExpiring.IsPresent
+        IncludePasswordNeverExpires     = $IncludePasswordNeverExpires.IsPresent
+        Reminders                       = $ReminderDays
+        PasswordNeverExpiresDays        = $PasswordNeverExpiresDays
+        IncludeNameProperties           = $IncludeNameProperties
+        IncludeName                     = $IncludeName
+        IncludeOU                       = $IncludeOU
+        ExcludeOU                       = $ExcludeOU
+        SendToManager                   = [ordered] @{}
 
-        ProcessManagersOnly         = $ProcessManagersOnly.IsPresent
+        ProcessManagersOnly             = $ProcessManagersOnly.IsPresent
 
-        OverwriteEmailProperty      = $OverwriteEmailProperty
+        OverwriteEmailProperty          = $OverwriteEmailProperty
         # properties to overwrite manager based on different field
-        OverwriteManagerProperty    = $OverwriteManagerProperty
+        OverwriteManagerProperty        = $OverwriteManagerProperty
+
+        OverwriteEmailFromExternalUsers = $OverwriteEmailFromExternalUsers.IsPresent
     }
     $Output.SendToManager['Manager'] = [ordered] @{
         Enable    = $false
@@ -202,7 +220,10 @@
             $RemindersExecution = & $ReminderConfiguration
         } catch {
             Write-Color -Text "[e]", " Processing rule ", $Output.Name, " failed because of error: ", $_.Exception.Message -Color Yellow, White, Red
-            return
+            return [ordered] @{
+                Type  = 'PasswordConfigurationRule'
+                Error = $_.Exception.Message
+            }
         }
         foreach ($Reminder in $RemindersExecution) {
             if ($Reminder.Type -eq 'Manager') {
